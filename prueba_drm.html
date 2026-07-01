@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Widevine PoC - Live TV</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.3.5/shaka-player.compiled.js"></script>
+    <style>
+        body { background-color: #111; color: #fff; font-family: sans-serif; text-align: center; }
+        video { width: 80%; max-width: 900px; margin-top: 20px; border: 2px solid #444; }
+        #logs { text-align: left; background: #222; padding: 10px; width: 80%; max-width: 900px; margin: 20px auto; font-family: monospace; }
+    </style>
+</head>
+<body>
+
+    <h2>Widevine DRM - PoC Player</h2>
+    <video id="video" controls autoplay></video>
+    
+    <div id="logs">Esperando inicialización...</div>
+
+    <script>
+        function log(msg) {
+            document.getElementById('logs').innerHTML += '<br>> ' + msg;
+            console.log(msg);
+        }
+
+        async function initApp() {
+            // Instalar polyfills para asegurar compatibilidad
+            shaka.polyfill.installAll();
+
+            if (!shaka.Player.isBrowserSupported()) {
+                log("Error: Tu navegador no soporta Shaka Player.");
+                return;
+            }
+
+            const video = document.getElementById('video');
+            const player = new shaka.Player(video);
+
+            // Escuchar errores del player
+            player.addEventListener('error', (event) => log("Error en Player: " + event.detail.code));
+
+            // --- CONFIGURACIÓN DE DRM ---
+            player.configure({
+                drm: {
+                    servers: {
+                        // Aquí va la IP de tu servidor NGINX/KMS
+                        'com.widevine.alpha': 'https://drm.mundogo.cl/wv/license'
+                    }
+                }
+            });
+
+            // --- INTERCEPTOR DE PETICIÓN (El puente entre Shaka y nuestra PoC) ---
+            player.getNetworkingEngine().registerRequestFilter(function(type, request) {
+                if (type == shaka.net.NetworkingEngine.RequestType.LICENSE) {
+                    log("Interceptando petición de licencia hacia el Proxy...");
+                    
+                    // Convertimos el binario del "Challenge" de Widevine a Base64
+                    const challengeBase64 = btoa(String.fromCharCode.apply(null, new Uint8Array(request.body)));
+                    
+                    /* NOTA ARQUITECTÓNICA: En un servidor CWIP real, el KID viene cifrado dentro 
+                     del 'challengeBase64' y el SDK de Google lo extrae. Como nuestra PoC no tiene
+                     el SDK en C++, debemos inyectar el KID manualmente en el JSON.
+                     */
+                    const bodyJson = JSON.stringify({
+                        token: "user_valid_token", // Simulamos un usuario logueado
+                        kid: "8c4da67437ee6ec4e5763607e5347153", // <--- ¡REEMPLAZA ESTO!
+                        challenge: challengeBase64
+                    });
+                    
+                    // Sobreescribimos la petición para enviar nuestro JSON
+                    request.body = new TextEncoder().encode(bodyJson);
+                    request.headers['Content-Type'] = 'application/json';
+                }
+            });
+
+            // --- CARGAR EL MANIFIESTO ---
+            try {
+                // Reemplaza con la IP de tu servidor de ORIGEN donde corre el script de Python (Puerto 8080)
+                const manifestUri = 'https://live.mundogo.cl/espn4/espn4.mpd';
+                log("Cargando manifiesto desde: " + manifestUri);
+                
+                await player.load(manifestUri);
+                log("¡Manifiesto cargado! Petición de licencia enviada. Revisa los logs de tu API.");
+            } catch (e) {
+                log("Error cargando el video: " + e.message);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', initApp);
+    </script>
+</body>
+</html>
