@@ -1,0 +1,26 @@
+#!/usr/bin/expect -f
+set timeout 120
+set password [lindex $argv 0]
+set deploy_args [lrange $argv 1 end]
+
+set env(SUDO_PASS) $password
+
+spawn bash deploy-kms.sh {*}$deploy_args
+
+expect {
+    -re "(Contraseña sudo|password:|assphrase:)" {
+        send "$password\r"
+        exp_continue
+    }
+    -re "(yes/no)" {
+        send "yes\r"
+        exp_continue
+    }
+    eof {
+        puts "\n(expect: done)"
+    }
+    timeout {
+        puts "\n(expect: timeout)"
+        exit 1
+    }
+}

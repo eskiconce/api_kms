@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KMS HA Architecture - Active/Standby</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 40px 20px; }
+        h1 { font-size: 1.8rem; margin-bottom: 8px; color: #fff; }
+        .subtitle { color: #94a3b8; margin-bottom: 40px; font-size: 0.95rem; }
+        .diagram { position: relative; width: 800px; height: 600px; background: #1e293b; border-radius: 16px; border: 1px solid #334155; overflow: hidden; }
+        
+        /* VIP */
+        .vip { position: absolute; top: 30px; left: 50%; transform: translateX(-50%); background: linear-gradient(135deg, #0ea5e9, #0284c7); padding: 16px 32px; border-radius: 12px; text-align: center; box-shadow: 0 4px 20px rgba(14, 165, 233, 0.3); }
+        .vip .label { font-weight: 700; font-size: 1.1rem; }
+        .vip .ip { font-size: 0.85rem; opacity: 0.9; margin-top: 4px; }
+        
+        /* Servers */
+        .server { position: absolute; width: 200px; padding: 20px; border-radius: 12px; text-align: center; }
+        .server-a { top: 150px; left: 80px; background: linear-gradient(135deg, #10b981, #059669); box-shadow: 0 4px 20px rgba(16, 185, 129, 0.3); }
+        .server-b { top: 150px; right: 80px; background: linear-gradient(135deg, #f59e0b, #d97706); box-shadow: 0 4px 20px rgba(245, 158, 11, 0.3); }
+        .server .role { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.9; margin-bottom: 6px; }
+        .server .name { font-weight: 700; font-size: 1.1rem; }
+        .server .ip { font-size: 0.8rem; opacity: 0.85; margin-top: 4px; }
+        
+        /* External Services */
+        .external { position: absolute; padding: 14px 24px; border-radius: 10px; text-align: center; border: 2px dashed; }
+        .redis { top: 350px; left: 80px; background: rgba(239, 68, 68, 0.15); border-color: #ef4444; }
+        .mysql { top: 350px; right: 80px; background: rgba(59, 130, 246, 0.15); border-color: #3b82f6; }
+        .drm { bottom: 40px; left: 50%; transform: translateX(-50%); background: rgba(168, 85, 247, 0.15); border-color: #a855f7; }
+        .external .name { font-weight: 600; font-size: 0.95rem; }
+        .external .type { font-size: 0.75rem; opacity: 0.7; margin-top: 2px; }
+        
+        /* Arrows */
+        .arrow { position: absolute; }
+        .arrow-vip-a { top: 85px; left: 240px; width: 120px; height: 60px; }
+        .arrow-vip-b { top: 85px; right: 240px; width: 120px; height: 60px; }
+        .arrow-heartbeat { top: 185px; left: 280px; width: 240px; height: 2px; }
+        .arrow-a-redis { top: 260px; left: 150px; width: 2px; height: 80px; }
+        .arrow-b-redis { top: 260px; left: 400px; width: 180px; height: 80px; }
+        .arrow-a-mysql { top: 260px; right: 400px; width: 180px; height: 80px; }
+        .arrow-b-mysql { top: 260px; right: 150px; width: 2px; height: 80px; }
+        .arrow-a-drm { bottom: 140px; left: 180px; width: 200px; height: 80px; }
+        
+        svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        .line { stroke: #64748b; stroke-width: 2; fill: none; }
+        .line-active { stroke: #10b981; stroke-width: 3; }
+        .line-standby { stroke: #f59e0b; stroke-width: 2; stroke-dasharray: 8 4; }
+        .line-heartbeat { stroke: #94a3b8; stroke-width: 1.5; stroke-dasharray: 4 4; }
+        .arrowhead { fill: #64748b; }
+        .arrowhead-active { fill: #10b981; }
+        
+        .label-svg { font-size: 11px; fill: #94a3b8; font-family: 'Segoe UI', sans-serif; }
+        .label-active { fill: #10b981; font-weight: 600; }
+        .label-standby { fill: #f59e0b; }
+        
+        /* Cluster Box */
+        .cluster { position: absolute; top: 130px; left: 60px; right: 60px; height: 110px; border: 2px solid #334155; border-radius: 12px; pointer-events: none; }
+        .cluster-label { position: absolute; top: 125px; left: 70px; background: #1e293b; padding: 2px 10px; font-size: 0.75rem; color: #64748b; text-transform: uppercase; letter-spacing: 1px; }
+        
+        /* Legend */
+        .legend { display: flex; gap: 24px; margin-top: 24px; font-size: 0.85rem; color: #94a3b8; }
+        .legend-item { display: flex; align-items: center; gap: 8px; }
+        .legend-line { width: 30px; height: 3px; }
+        .legend-line.active { background: #10b981; }
+        .legend-line.standby { background: repeating-linear-gradient(90deg, #f59e0b 0, #f59e0b 8px, transparent 8px, transparent 12px); }
+        .legend-line.heartbeat { background: repeating-linear-gradient(90deg, #94a3b8 0, #94a3b8 4px, transparent 4px, transparent 8px); }
+        
+        .info { margin-top: 30px; background: #1e293b; padding: 20px 30px; border-radius: 10px; border: 1px solid #334155; max-width: 800px; }
+        .info h3 { color: #fff; margin-bottom: 12px; font-size: 1rem; }
+        .info ul { list-style: none; }
+        .info li { padding: 6px 0; color: #94a3b8; font-size: 0.9rem; }
+        .info li strong { color: #e2e8f0; }
+    </style>
+</head>
+<body>
+    <h1>KMS HA Architecture</h1>
+    <p class="subtitle">Active/Standby with Keepalived + VIP</p>
+    
+    <div class="diagram">
+        <!-- Cluster Boundary -->
+        <div class="cluster"></div>
+        <span class="cluster-label">KMS Cluster</span>
+        
+        <!-- VIP -->
+        <div class="vip">
+            <div class="label">VIP (Floating IP)</div>
+            <div class="ip">172.16.222.250</div>
+        </div>
+        
+        <!-- Servers -->
+        <div class="server server-a">
+            <div class="role">MASTER (Priority 101)</div>
+            <div class="name">KMS Server A</div>
+            <div class="ip">172.16.222.241</div>
+        </div>
+        
+        <div class="server server-b">
+            <div class="role">BACKUP (Priority 100)</div>
+            <div class="name">KMS Server B</div>
+            <div class="ip">172.16.222.242</div>
+        </div>
+        
+        <!-- External Services -->
+        <div class="external redis">
+            <div class="name">Redis</div>
+            <div class="type">Cache (External HA)</div>
+        </div>
+        
+        <div class="external mysql">
+            <div class="name">MySQL</div>
+            <div class="type">Database (External HA)</div>
+        </div>
+        
+        <div class="external drm">
+            <div class="name">DRM Provider</div>
+            <div class="type">Widevine License Server</div>
+        </div>
+        
+        <!-- SVG Lines -->
+        <svg>
+            <!-- Arrow markers -->
+            <defs>
+                <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                    <polygon points="0 0, 10 3.5, 0 7" class="arrowhead"/>
+                </marker>
+                <marker id="arrowhead-active" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                    <polygon points="0 0, 10 3.5, 0 7" class="arrowhead-active"/>
+                </marker>
+            </defs>
+            
+            <!-- VIP to Server A (Active) -->
+            <line x1="350" y1="85" x2="220" y2="150" class="line line-active" marker-end="url(#arrowhead-active)"/>
+            <text x="260" y="110" class="label-svg label-active">active</text>
+            
+            <!-- VIP to Server B (Standby) -->
+            <line x1="450" y1="85" x2="520" y2="150" class="line line-standby" marker-end="url(#arrowhead)"/>
+            <text x="510" y="110" class="label-svg label-standby">standby</text>
+            
+            <!-- Heartbeat between servers -->
+            <line x1="280" y1="185" x2="460" y2="185" class="line line-heartbeat"/>
+            <text x="345" y="178" class="label-svg">heartbeat</text>
+            
+            <!-- Server A to Redis -->
+            <line x1="180" y1="225" x2="140" y2="340" class="line" marker-end="url(#arrowhead)"/>
+            
+            <!-- Server B to Redis -->
+            <line x1="450" y1="225" x2="180" y2="340" class="line" marker-end="url(#arrowhead)"/>
+            
+            <!-- Server A to MySQL -->
+            <line x1="350" y1="225" x2="550" y2="340" class="line" marker-end="url(#arrowhead)"/>
+            
+            <!-- Server B to MySQL -->
+            <line x1="550" y1="225" x2="600" y2="340" class="line" marker-end="url(#arrowhead)"/>
+            
+            <!-- Server A to DRM -->
+            <line x1="220" y1="225" x2="380" y2="510" class="line" marker-end="url(#arrowhead)"/>
+        </svg>
+    </div>
+    
+    <div class="legend">
+        <div class="legend-item">
+            <div class="legend-line active"></div>
+            <span>Active traffic</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-line standby"></div>
+            <span>Standby (failover)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-line heartbeat"></div>
+            <span>VRRP Heartbeat</span>
+        </div>
+    </div>
+    
+    <div class="info">
+        <h3>Failover Sequence</h3>
+        <ul>
+            <li><strong>1.</strong> Server A fails (process crash, network, etc.)</li>
+            <li><strong>2.</strong> Health check fails 3 times (6 seconds)</li>
+            <li><strong>3.</strong> Keepalived on B detects MASTER timeout</li>
+            <li><strong>4.</strong> B sends VRRP packet with higher priority</li>
+            <li><strong>5.</strong> VIP moves to B (~3-5 seconds total)</li>
+            <li><strong>6.</strong> Traffic now served by B</li>
+            <li><strong>7.</strong> When A recovers, VIP returns to A (preempt)</li>
+        </ul>
+    </div>
+</body>
+</html>

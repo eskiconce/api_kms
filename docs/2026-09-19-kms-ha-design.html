@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.11" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>KMS HA Design</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      white-space: pre-wrap;
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">KMS HA Design</h1>
+</header>
+<h1 id="kms-ha-design---activestandby-con-keepalived-vip">KMS HA Design
+- Active/Standby con Keepalived + VIP</h1>
+<p><strong>Fecha:</strong> 2026-09-19 <strong>Estado:</strong> Aprobado
+<strong>Autor:</strong> Edmundocuevas</p>
+<hr />
+<h2 id="resumen-ejecutivo">1. Resumen Ejecutivo</h2>
+<p>Diseñar alta disponibilidad (HA) para la API KMS de MundoGo
+utilizando <strong>Keepalived + VIP</strong> para failover automático
+entre dos servidores (activo/standby).</p>
+<h2 id="objetivos">2. Objetivos</h2>
+<ul>
+<li><strong>Disponibilidad:</strong> 99.9% uptime (&lt; 8.76 horas
+downtime/año)</li>
+<li><strong>Failover automático:</strong> &lt; 5 segundos de
+interrupción</li>
+<li><strong>Simplicidad:</strong> Mínimo de componentes nuevos</li>
+<li><strong>Sin cambios significativos</strong> en la lógica de negocio
+existente</li>
+</ul>
+<h2 id="arquitectura-actual">3. Arquitectura Actual</h2>
+<pre><code>┌─────────────────────────────────────────┐
+│           KMS Server (172.16.222.240)   │
+│  ┌─────────────────────────────────┐   │
+│  │  FastAPI (main.py)              │   │
+│  │  - /health                      │   │
+│  │  - /kms/generate                │   │
+│  │  - /wv/license                  │   │
+│  │  - /api/vip/users               │   │
+│  └─────────────────────────────────┘   │
+│                                         │
+│  ┌──────────────┐  ┌──────────────┐   │
+│  │    Redis     │  │    MySQL     │   │
+│  │  (local)     │  │  (local)     │   │
+│  └──────────────┘  └──────────────┘   │
+└─────────────────────────────────────────┘</code></pre>
+<p><strong>Problema:</strong> Punto único de falla.</p>
+<h2 id="arquitectura-propuesta-ha">4. Arquitectura Propuesta (HA)</h2>
+<pre><code>                        ┌─────────────────┐
+                        │   VIP           │
+                        │ 172.16.222.250  │
+                        └────────┬────────┘
+                                 │
+            ┌────────────────────┴────────────────────┐
+            │                                         │
+   ┌────────▼────────┐                   ┌───────────▼──────────┐
+   │  KMS Server A   │                   │  KMS Server B        │
+   │  172.16.222.241 │                   │  172.16.222.242      │
+   │  MASTER         │◄─────────────────►│  BACKUP               │
+   │  (keepalived)   │    heartbeat      │  (keepalived)         │
+   └────────┬────────┘                   └───────────┬──────────┘
+            │                                         │
+            └────────────────────┬────────────────────┘
+                                 │
+            ┌────────────────────┼────────────────────┐
+            │                    │                    │
+   ┌────────▼────────┐  ┌───────▼───────┐  ┌────────▼────────┐
+   │  Redis Externo  │  │ MySQL Externo │  │  Proveedor DRM  │
+   │  (HA propio)    │  │ (HA propio)   │  │  (externo)      │
+   └─────────────────┘  └───────────────┘  └─────────────────┘</code></pre>
+<h2 id="especificación-de-componentes">5. Especificación de
+Componentes</h2>
+<h3 id="servidores">5.1 Servidores</h3>
+<table>
+<thead>
+<tr>
+<th>Componente</th>
+<th>IP</th>
+<th>Rol</th>
+<th>OS</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>KMS Server A</strong></td>
+<td>172.16.222.241</td>
+<td>Activo (MASTER)</td>
+<td>Ubuntu 22.04</td>
+</tr>
+<tr>
+<td><strong>KMS Server B</strong></td>
+<td>172.16.222.242</td>
+<td>Standby (BACKUP)</td>
+<td>Ubuntu 22.04</td>
+</tr>
+<tr>
+<td><strong>VIP</strong></td>
+<td>172.16.222.250</td>
+<td>Flotante</td>
+<td>-</td>
+</tr>
+</tbody>
+</table>
+<h3 id="software-por-servidor">5.2 Software por Servidor</h3>
+<table>
+<thead>
+<tr>
+<th>Componente</th>
+<th>Versión</th>
+<th>Propósito</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Python</td>
+<td>3.11+</td>
+<td>Runtime de la API</td>
+</tr>
+<tr>
+<td>FastAPI</td>
+<td>latest</td>
+<td>Framework web</td>
+</tr>
+<tr>
+<td>uvicorn</td>
+<td>latest</td>
+<td>ASGI server</td>
+</tr>
+<tr>
+<td>keepalived</td>
+<td>2.2.7+</td>
+<td>Failover HA</td>
+</tr>
+<tr>
+<td>curl</td>
+<td>latest</td>
+<td>Health checks</td>
+</tr>
+</tbody>
+</table>
+<h3 id="keepalived-configuration">5.3 Keepalived Configuration</h3>
+<p><strong>Servidor A (MASTER) -
+<code>/etc/keepalived/keepalived.conf</code>:</strong></p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode conf"><code class="sourceCode toml"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vrrp_script</span> <span class="dt">chk_kms</span> <span class="er">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">script</span> <span class="dt">&quot;/opt/kms/health-check.sh&quot;</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">interval</span> <span class="dt">2</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">weight</span> <span class="dt">-20</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">fall</span> <span class="dt">3</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">rise</span> <span class="dt">2</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="er">}</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a><span class="dt">vrrp_instance</span> <span class="dt">VI_1</span> <span class="er">{</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">state</span> <span class="dt">MASTER</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">interface</span> <span class="dt">eth0</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">virtual_router_id</span> <span class="dt">51</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">priority</span> <span class="dt">101</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">advert_int</span> <span class="dt">1</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">authentication</span> <span class="er">{</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>        <span class="dt">auth_type</span> <span class="dt">PASS</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>        <span class="dt">auth_pass</span> <span class="dt">kmssecret</span></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>    <span class="er">}</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">virtual_ipaddress</span> <span class="er">{</span></span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>        <span class="dt">172.16.222.250</span></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>    <span class="er">}</span></span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>    <span class="dt">track_script</span> <span class="er">{</span></span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>        <span class="dt">chk_kms</span></span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>    <span class="er">}</span></span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a><span class="er">}</span></span></code></pre></div>
+<p><strong>Servidor B (BACKUP) -
+<code>/etc/keepalived/keepalived.conf</code>:</strong></p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode conf"><code class="sourceCode toml"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vrrp_script</span> <span class="dt">chk_kms</span> <span class="er">{</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">script</span> <span class="dt">&quot;/opt/kms/health-check.sh&quot;</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">interval</span> <span class="dt">2</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">weight</span> <span class="dt">-20</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">fall</span> <span class="dt">3</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">rise</span> <span class="dt">2</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="er">}</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a><span class="dt">vrrp_instance</span> <span class="dt">VI_1</span> <span class="er">{</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">state</span> <span class="dt">BACKUP</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">interface</span> <span class="dt">eth0</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">virtual_router_id</span> <span class="dt">51</span></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">priority</span> <span class="dt">100</span></span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">advert_int</span> <span class="dt">1</span></span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">authentication</span> <span class="er">{</span></span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>        <span class="dt">auth_type</span> <span class="dt">PASS</span></span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>        <span class="dt">auth_pass</span> <span class="dt">kmssecret</span></span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>    <span class="er">}</span></span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">virtual_ipaddress</span> <span class="er">{</span></span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>        <span class="dt">172.16.222.250</span></span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a>    <span class="er">}</span></span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a>    <span class="dt">track_script</span> <span class="er">{</span></span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a>        <span class="dt">chk_kms</span></span>
+<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a>    <span class="er">}</span></span>
+<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a><span class="er">}</span></span></code></pre></div>
+<h3 id="health-check-script">5.4 Health Check Script</h3>
+<p><strong><code>/opt/kms/health-check.sh</code>:</strong></p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co">#!/bin/bash</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="co"># Health check para KMS API</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Retorna 0 si OK, 1 si FAIL</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="va">HTTP_CODE</span><span class="op">=</span><span class="va">$(</span><span class="ex">curl</span> <span class="at">-s</span> <span class="at">-o</span> /dev/null <span class="at">-w</span> <span class="st">&quot;%{http_code}&quot;</span> http://localhost:8000/health <span class="at">--max-time</span> 3<span class="va">)</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="bu">[</span> <span class="st">&quot;</span><span class="va">$HTTP_CODE</span><span class="st">&quot;</span> <span class="ot">==</span> <span class="st">&quot;200&quot;</span> <span class="bu">]</span><span class="kw">;</span> <span class="cf">then</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    <span class="bu">exit</span> 0</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a><span class="cf">else</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>    <span class="ex">logger</span> <span class="at">-t</span> kms-health <span class="st">&quot;Health check failed: HTTP </span><span class="va">$HTTP_CODE</span><span class="st">&quot;</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>    <span class="bu">exit</span> 1</span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a><span class="cf">fi</span></span></code></pre></div>
+<h3 id="systemd-service">5.5 Systemd Service</h3>
+<p><strong><code>/etc/systemd/system/kms-api.service</code>:</strong></p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode ini"><code class="sourceCode ini"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">[Unit]</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="dt">Description</span><span class="ot">=</span><span class="st">KMS API Service</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="dt">After</span><span class="ot">=</span><span class="st">network.target</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="dt">Wants</span><span class="ot">=</span><span class="st">network-online.target</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a><span class="kw">[Service]</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a><span class="dt">Type</span><span class="ot">=</span><span class="st">simple</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a><span class="dt">User</span><span class="ot">=</span><span class="st">kms</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a><span class="dt">Group</span><span class="ot">=</span><span class="st">kms</span></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a><span class="dt">WorkingDirectory</span><span class="ot">=</span><span class="st">/opt/kms</span></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a><span class="dt">ExecStart</span><span class="ot">=</span><span class="st">/opt/kms/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000 --workers 2</span></span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a><span class="dt">Restart</span><span class="ot">=</span><span class="st">always</span></span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a><span class="dt">RestartSec</span><span class="ot">=</span><span class="dv">5</span></span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a><span class="dt">StartLimitBurst</span><span class="ot">=</span><span class="dv">5</span></span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a><span class="dt">StartLimitIntervalSec</span><span class="ot">=</span><span class="dv">60</span></span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a><span class="dt">EnvironmentFile</span><span class="ot">=</span><span class="st">/opt/kms/.env</span></span>
+<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a><span class="co"># Security</span></span>
+<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a><span class="dt">NoNewPrivileges</span><span class="ot">=</span><span class="kw">yes</span></span>
+<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a><span class="dt">ProtectSystem</span><span class="ot">=</span><span class="st">strict</span></span>
+<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a><span class="dt">ProtectHome</span><span class="ot">=</span><span class="kw">yes</span></span>
+<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a><span class="dt">ReadWritePaths</span><span class="ot">=</span><span class="st">/opt/kms/logs</span></span>
+<span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-25"><a href="#cb6-25" aria-hidden="true" tabindex="-1"></a><span class="kw">[Install]</span></span>
+<span id="cb6-26"><a href="#cb6-26" aria-hidden="true" tabindex="-1"></a><span class="dt">WantedBy</span><span class="ot">=</span><span class="st">multi-user.target</span></span></code></pre></div>
+<h3 id="variables-de-entorno">5.6 Variables de Entorno</h3>
+<p><strong><code>/opt/kms/.env</code>:</strong></p>
+<pre class="env"><code># Redis (externo)
+REDIS_HOST=172.16.222.100
+REDIS_PORT=6379
+REDIS_DB=0
+
+# MySQL (externo)
+MYSQL_HOST=172.16.222.101
+MYSQL_USER=drm_user
+MYSQL_PASSWORD=&lt;secure_password&gt;
+MYSQL_DATABASE=drm_system
+
+# DRM Provider
+DRM_PROVIDER_URL=https://35.234.128.244:8080/ConcurrentPlayback
+
+# CMS Webhook
+CMS_API_KEY=&lt;cms_key&gt;
+
+# Logging
+LOG_DIR=/opt/kms/logs
+LOG_LEVEL=INFO</code></pre>
+<h2 id="flujo-de-failover">6. Flujo de Failover</h2>
+<pre><code>1. Servidor A falla (proceso cae, red, etc.)
+2. Health check en A falla 3 veces consecutivas (6 segundos)
+3. Keepalived en B detecta timeout del MASTER
+4. B envía paquete VRRP con prioridad más alta
+5. B toma control de la VIP (172.16.222.250)
+6. Tráfico ahora llega a B (~3-5 segundos total)
+7. B sirve requests normalmente
+8. Cuando A se recupera:
+   a. Health check de A pasa
+   b. Keepalived en A detecta que B tiene la VIP
+   c. A toma control de la VIP (preempt)
+   d. Tráfico vuelve a A</code></pre>
+<h2 id="scripts-de-deploy">7. Scripts de Deploy</h2>
+<h3 id="deploy-kms-ha.sh">7.1 deploy-kms-ha.sh</h3>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co">#!/bin/bash</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="bu">set</span> <span class="at">-e</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="va">SERVERS</span><span class="op">=</span><span class="va">(</span><span class="st">&quot;172.16.222.241&quot;</span> <span class="st">&quot;172.16.222.242&quot;</span><span class="va">)</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="va">SSH_USER</span><span class="op">=</span><span class="st">&quot;oymservice&quot;</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a><span class="va">REMOTE_DIR</span><span class="op">=</span><span class="st">&quot;/opt/kms&quot;</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> SERVER <span class="kw">in</span> <span class="st">&quot;</span><span class="va">${SERVERS</span><span class="op">[@]</span><span class="va">}</span><span class="st">&quot;</span><span class="kw">;</span> <span class="cf">do</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>    <span class="bu">echo</span> <span class="st">&quot;═══════════════════════════════════════&quot;</span></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>    <span class="bu">echo</span> <span class="st">&quot;Deploying to </span><span class="va">$SERVER</span><span class="st">&quot;</span></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>    <span class="bu">echo</span> <span class="st">&quot;═══════════════════════════════════════&quot;</span></span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Crear directorio</span></span>
+<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a>    <span class="fu">ssh</span> <span class="st">&quot;</span><span class="va">$SSH_USER</span><span class="st">@</span><span class="va">$SERVER</span><span class="st">&quot;</span> <span class="st">&quot;sudo mkdir -p </span><span class="va">$REMOTE_DIR</span><span class="st">/logs&quot;</span></span>
+<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Subir archivos</span></span>
+<span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a>    <span class="fu">scp</span> main.py <span class="st">&quot;</span><span class="va">$SSH_USER</span><span class="st">@</span><span class="va">$SERVER</span><span class="st">:/tmp/main.py&quot;</span></span>
+<span id="cb9-18"><a href="#cb9-18" aria-hidden="true" tabindex="-1"></a>    <span class="fu">scp</span> .env <span class="st">&quot;</span><span class="va">$SSH_USER</span><span class="st">@</span><span class="va">$SERVER</span><span class="st">:/tmp/.env&quot;</span></span>
+<span id="cb9-19"><a href="#cb9-19" aria-hidden="true" tabindex="-1"></a>    <span class="fu">scp</span> health-check.sh <span class="st">&quot;</span><span class="va">$SSH_USER</span><span class="st">@</span><span class="va">$SERVER</span><span class="st">:/tmp/health-check.sh&quot;</span></span>
+<span id="cb9-20"><a href="#cb9-20" aria-hidden="true" tabindex="-1"></a>    <span class="fu">scp</span> keepalived.conf.<span class="st">&quot;</span><span class="va">$(</span><span class="bu">echo</span> <span class="va">$SERVER</span> <span class="kw">|</span> <span class="fu">awk</span> <span class="at">-F.</span> <span class="st">&#39;{print $4}&#39;</span><span class="va">)</span><span class="st">&quot;</span> <span class="dt">\</span></span>
+<span id="cb9-21"><a href="#cb9-21" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;</span><span class="va">$SSH_USER</span><span class="st">@</span><span class="va">$SERVER</span><span class="st">:/tmp/keepalived.conf&quot;</span></span>
+<span id="cb9-22"><a href="#cb9-22" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb9-23"><a href="#cb9-23" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Instalar</span></span>
+<span id="cb9-24"><a href="#cb9-24" aria-hidden="true" tabindex="-1"></a>    <span class="fu">ssh</span> <span class="st">&quot;</span><span class="va">$SSH_USER</span><span class="st">@</span><span class="va">$SERVER</span><span class="st">&quot;</span> <span class="st">&quot;</span></span>
+<span id="cb9-25"><a href="#cb9-25" aria-hidden="true" tabindex="-1"></a><span class="st">        sudo mv /tmp/main.py </span><span class="va">$REMOTE_DIR</span><span class="st">/</span></span>
+<span id="cb9-26"><a href="#cb9-26" aria-hidden="true" tabindex="-1"></a><span class="st">        sudo mv /tmp/.env </span><span class="va">$REMOTE_DIR</span><span class="st">/</span></span>
+<span id="cb9-27"><a href="#cb9-27" aria-hidden="true" tabindex="-1"></a><span class="st">        sudo mv /tmp/health-check.sh </span><span class="va">$REMOTE_DIR</span><span class="st">/</span></span>
+<span id="cb9-28"><a href="#cb9-28" aria-hidden="true" tabindex="-1"></a><span class="st">        sudo chmod +x </span><span class="va">$REMOTE_DIR</span><span class="st">/health-check.sh</span></span>
+<span id="cb9-29"><a href="#cb9-29" aria-hidden="true" tabindex="-1"></a><span class="st">        sudo mv /tmp/keepalived.conf /etc/keepalived/keepalived.conf</span></span>
+<span id="cb9-30"><a href="#cb9-30" aria-hidden="true" tabindex="-1"></a><span class="st">        sudo systemctl restart keepalived</span></span>
+<span id="cb9-31"><a href="#cb9-31" aria-hidden="true" tabindex="-1"></a><span class="st">        sudo systemctl restart kms-api</span></span>
+<span id="cb9-32"><a href="#cb9-32" aria-hidden="true" tabindex="-1"></a><span class="st">    &quot;</span></span>
+<span id="cb9-33"><a href="#cb9-33" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb9-34"><a href="#cb9-34" aria-hidden="true" tabindex="-1"></a>    <span class="bu">echo</span> <span class="st">&quot;✅ </span><span class="va">$SERVER</span><span class="st"> deployed&quot;</span></span>
+<span id="cb9-35"><a href="#cb9-35" aria-hidden="true" tabindex="-1"></a><span class="cf">done</span></span>
+<span id="cb9-36"><a href="#cb9-36" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-37"><a href="#cb9-37" aria-hidden="true" tabindex="-1"></a><span class="bu">echo</span> <span class="st">&quot;&quot;</span></span>
+<span id="cb9-38"><a href="#cb9-38" aria-hidden="true" tabindex="-1"></a><span class="bu">echo</span> <span class="st">&quot;🎉 HA Deployment complete&quot;</span></span>
+<span id="cb9-39"><a href="#cb9-39" aria-hidden="true" tabindex="-1"></a><span class="bu">echo</span> <span class="st">&quot;VIP: 172.16.222.250&quot;</span></span></code></pre></div>
+<h2 id="verificación-post-deploy">8. Verificación Post-Deploy</h2>
+<h3 id="checklist">8.1 Checklist</h3>
+<ul class="task-list">
+<li><label><input type="checkbox" />Ambos servidores corriendo KMS
+API</label></li>
+<li><label><input type="checkbox" />Health check retorna 200 en
+ambos</label></li>
+<li><label><input type="checkbox" />Keepalived corriendo en
+ambos</label></li>
+<li><label><input type="checkbox" />VIP (172.16.222.250)
+respondiendo</label></li>
+<li><label><input type="checkbox" />Failover manual funciona (apagar A,
+verificar B toma VIP)</label></li>
+<li><label><input type="checkbox" />Failback funciona (encender A,
+verificar A toma VIP de vuelta)</label></li>
+</ul>
+<h3 id="comandos-de-verificación">8.2 Comandos de Verificación</h3>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Verificar VIP</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="ex">ip</span> addr show <span class="kw">|</span> <span class="fu">grep</span> 172.16.222.250</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Verificar keepalived</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a><span class="fu">sudo</span> systemctl status keepalived</span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Verificar health check</span></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a><span class="ex">curl</span> http://172.16.222.250/health</span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a><span class="co"># Simular failover (en Server A)</span></span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a><span class="fu">sudo</span> systemctl stop kms-api</span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a><span class="co"># Verificar en B que VIP se movió</span></span>
+<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a><span class="ex">ip</span> addr show <span class="kw">|</span> <span class="fu">grep</span> 172.16.222.250</span></code></pre></div>
+<h2 id="monitoreo">9. Monitoreo</h2>
+<h3 id="métricas-clave">9.1 Métricas Clave</h3>
+<table>
+<thead>
+<tr>
+<th>Métrica</th>
+<th>Alerta si</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Health check failures</td>
+<td>&gt; 3 consecutivos</td>
+</tr>
+<tr>
+<td>Failover events</td>
+<td>Cualquier cambio</td>
+</tr>
+<tr>
+<td>Request latency</td>
+<td>&gt; 500ms</td>
+</tr>
+<tr>
+<td>Error rate</td>
+<td>&gt; 1%</td>
+</tr>
+</tbody>
+</table>
+<h3 id="logs">9.2 Logs</h3>
+<ul>
+<li><strong>KMS API:</strong>
+<code>/opt/kms/logs/activity.log</code></li>
+<li><strong>Keepalived:</strong> <code>/var/log/syslog</code> (filtro:
+<code>keepalived</code>)</li>
+<li><strong>Health Check:</strong> syslog (tag:
+<code>kms-health</code>)</li>
+</ul>
+<h2 id="riesgos-y-mitigaciones">10. Riesgos y Mitigaciones</h2>
+<table>
+<colgroup>
+<col style="width: 40%" />
+<col style="width: 60%" />
+</colgroup>
+<thead>
+<tr>
+<th>Riesgo</th>
+<th>Mitigación</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Split-brain (ambos creen ser MASTER)</td>
+<td><code>virtual_router_id</code> único, authentication PASS</td>
+</tr>
+<tr>
+<td>Health check false positive</td>
+<td><code>fall 3</code> (3 fallos antes de failover)</td>
+</tr>
+<tr>
+<td>Red cae entre servidores</td>
+<td>Keepalived solo funciona en misma VLAN</td>
+</tr>
+<tr>
+<td>VIP no se mueve</td>
+<td>Verificar <code>net.ipv4.ip_forward=1</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="próximos-pasos">11. Próximos Pasos</h2>
+<ol type="1">
+<li><strong>Provisionar servidores</strong> (241, 242) con Ubuntu
+22.04</li>
+<li><strong>Configurar red</strong> (misma VLAN, IPs estáticas)</li>
+<li><strong>Instalar dependencias</strong> en ambos servidores</li>
+<li><strong>Deploy keepalived</strong> en ambos</li>
+<li><strong>Deploy KMS API</strong> en ambos</li>
+<li><strong>Probar failover</strong> manual</li>
+<li><strong>Documentar IP final</strong> del VIP para clientes</li>
+</ol>
+</body>
+</html>
