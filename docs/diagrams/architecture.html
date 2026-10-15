@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KMS API - Arquitectura del Sistema</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; padding: 40px 20px; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        h1 { font-size: 1.8rem; margin-bottom: 8px; color: #fff; text-align: center; }
+        .subtitle { color: #94a3b8; margin-bottom: 40px; font-size: 0.95rem; text-align: center; }
+        
+        .diagram { background: #1e293b; border-radius: 16px; border: 1px solid #334155; padding: 40px; position: relative; }
+        
+        /* Clients */
+        .clients { display: flex; justify-content: center; gap: 20px; margin-bottom: 30px; }
+        .client { background: linear-gradient(135deg, #6366f1, #4f46e5); padding: 14px 24px; border-radius: 10px; text-align: center; min-width: 120px; }
+        .client .icon { font-size: 1.5rem; margin-bottom: 6px; }
+        .client .name { font-weight: 600; font-size: 0.9rem; }
+        
+        /* Arrows down */
+        .arrow-down { text-align: center; margin: 15px 0; font-size: 1.5rem; color: #64748b; }
+        
+        /* KMS Box */
+        .kms-box { background: linear-gradient(135deg, #0ea5e9, #0284c7); border-radius: 14px; padding: 25px; margin: 20px 0; box-shadow: 0 8px 30px rgba(14, 165, 233, 0.25); }
+        .kms-title { font-size: 1.3rem; font-weight: 700; text-align: center; margin-bottom: 15px; }
+        .kms-components { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+        .kms-comp { background: rgba(255,255,255,0.15); border-radius: 8px; padding: 12px; text-align: center; font-size: 0.85rem; }
+        .kms-comp .icon { font-size: 1.3rem; margin-bottom: 4px; }
+        
+        /* Services */
+        .services { display: flex; justify-content: center; gap: 30px; margin-top: 30px; }
+        .service { border-radius: 12px; padding: 20px; text-align: center; min-width: 160px; border: 2px solid; }
+        .service .icon { font-size: 2rem; margin-bottom: 8px; }
+        .service .name { font-weight: 700; font-size: 1.1rem; margin-bottom: 4px; }
+        .service .type { font-size: 0.8rem; opacity: 0.7; }
+        .service .port { font-size: 0.75rem; margin-top: 8px; padding: 4px 10px; background: rgba(0,0,0,0.2); border-radius: 4px; display: inline-block; }
+        
+        .redis { background: rgba(239, 68, 68, 0.15); border-color: #ef4444; color: #fca5a5; }
+        .mysql { background: rgba(59, 130, 246, 0.15); border-color: #3b82f6; color: #93c5fd; }
+        .drm { background: rgba(168, 85, 247, 0.15); border-color: #a855f7; color: #d8b4fe; }
+        
+        /* Legend */
+        .legend { display: flex; justify-content: center; gap: 30px; margin-top: 30px; padding-top: 20px; border-top: 1px solid #334155; }
+        .legend-item { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: #94a3b8; }
+        .legend-dot { width: 12px; height: 12px; border-radius: 3px; }
+        .dot-cache { background: #ef4444; }
+        .dot-store { background: #3b82f6; }
+        .dot-drm { background: #a855f7; }
+        
+        /* Features */
+        .features { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-top: 40px; }
+        .feature { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 20px; }
+        .feature h3 { color: #fff; font-size: 1rem; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+        .feature ul { list-style: none; }
+        .feature li { padding: 5px 0; color: #94a3b8; font-size: 0.9rem; padding-left: 20px; position: relative; }
+        .feature li::before { content: "→"; position: absolute; left: 0; color: #64748b; }
+        
+        .section-title { text-align: center; font-size: 1.3rem; color: #fff; margin: 40px 0 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MundoGo KMS API</h1>
+        <p class="subtitle">Arquitectura del Sistema — Key Management Server para DRM Widevine</p>
+        
+        <div class="diagram">
+            <!-- Clients -->
+            <div class="clients">
+                <div class="client">
+                    <div class="icon">📹</div>
+                    <div class="name">Packagers</div>
+                </div>
+                <div class="client">
+                    <div class="icon">📺</div>
+                    <div class="name">Players</div>
+                </div>
+                <div class="client">
+                    <div class="icon">🌐</div>
+                    <div class="name">CMS</div>
+                </div>
+                <div class="client">
+                    <div class="icon">⚙️</div>
+                    <div class="name">Ops</div>
+                </div>
+            </div>
+            
+            <!-- Arrow -->
+            <div class="arrow-down">↓ HTTP/REST ↓</div>
+            
+            <!-- KMS API -->
+            <div class="kms-box">
+                <div class="kms-title">⚡ KMS API — FastAPI (Port 8000)</div>
+                <div class="kms-components">
+                    <div class="kms-comp">
+                        <div class="icon">🔑</div>
+                        <div>Key Management</div>
+                    </div>
+                    <div class="kms-comp">
+                        <div class="icon">📜</div>
+                        <div>License Proxy</div>
+                    </div>
+                    <div class="kms-comp">
+                        <div class="icon">👥</div>
+                        <div>VIP Users</div>
+                    </div>
+                    <div class="kms-comp">
+                        <div class="icon">📊</div>
+                        <div>Monitoring</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Arrow -->
+            <div class="arrow-down">↓ ↓ ↓</div>
+            
+            <!-- Services -->
+            <div class="services">
+                <div class="service redis">
+                    <div class="icon">⚡</div>
+                    <div class="name">Redis</div>
+                    <div class="type">Cache Layer</div>
+                    <div class="port">:6379</div>
+                </div>
+                <div class="service mysql">
+                    <div class="icon">🗄️</div>
+                    <div class="name">MySQL</div>
+                    <div class="type">Data Store</div>
+                    <div class="port">:3306</div>
+                </div>
+                <div class="service drm">
+                    <div class="icon">🔐</div>
+                    <div class="name">DRM Provider</div>
+                    <div class="type">Widevine</div>
+                    <div class="port">HTTPS</div>
+                </div>
+            </div>
+            
+            <!-- Legend -->
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-dot dot-cache"></div>
+                    <span>Caché (keys activas)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-dot dot-store"></div>
+                    <span>Persistencia</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-dot dot-drm"></div>
+                    <span>Firma de licencias</span>
+                </div>
+            </div>
+        </div>
+        
+        <h2 class="section-title">Funcionalidades Principales</h2>
+        
+        <div class="features">
+            <div class="feature">
+                <h3>🔑 Content Key Management</h3>
+                <ul>
+                    <li>Generación automática de KID + Key</li>
+                    <li>Rotación bajo demanda o programada</li>
+                    <li>Caché Redis con fallback a MySQL</li>
+                    <li>Historial para VOD (keys anteriores válidas)</li>
+                </ul>
+            </div>
+            
+            <div class="feature">
+                <h3>📜 License Delivery</h3>
+                <ul>
+                    <li>Proxy a proveedor DRM Widevine</li>
+                    <li>Endpoints v1, v2 y proxy binario</li>
+                    <li>Validación de tokens</li>
+                    <li>Respuesta binaria (application/octet-stream)</li>
+                </ul>
+            </div>
+            
+            <div class="feature">
+                <h3>👥 VIP Users</h3>
+                <ul>
+                    <li>CRUD completo de usuarios</li>
+                    <li>Límites de pantallas concurrentes</li>
+                    <li>Sincronización bidireccional con CMS</li>
+                    <li>Webhook con autenticación API Key</li>
+                </ul>
+            </div>
+            
+            <div class="feature">
+                <h3>📊 Monitoring</h3>
+                <ul>
+                    <li>Health checks (Redis, MySQL)</li>
+                    <li>Estadísticas en tiempo real</li>
+                    <li>Logging detallado de actividad</li>
+                    <li>Actividad de licencias por usuario</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

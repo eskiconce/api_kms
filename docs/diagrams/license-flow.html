@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KMS API - Flujo de Licencias Widevine</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; padding: 40px 20px; }
+        .container { max-width: 900px; margin: 0 auto; }
+        h1 { font-size: 1.8rem; margin-bottom: 8px; color: #fff; text-align: center; }
+        .subtitle { color: #94a3b8; margin-bottom: 40px; font-size: 0.95rem; text-align: center; }
+        
+        .flow { background: #1e293b; border-radius: 16px; border: 1px solid #334155; padding: 40px; }
+        
+        .step { display: flex; align-items: flex-start; margin-bottom: 30px; position: relative; }
+        .step:last-child { margin-bottom: 0; }
+        
+        .step-number { background: linear-gradient(135deg, #0ea5e9, #0284c7); color: white; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.1rem; flex-shrink: 0; margin-right: 20px; }
+        
+        .step-content { flex: 1; }
+        .step-title { font-size: 1.1rem; font-weight: 600; color: #fff; margin-bottom: 6px; }
+        .step-desc { color: #94a3b8; font-size: 0.9rem; line-height: 1.5; }
+        .step-code { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 12px 16px; margin-top: 10px; font-family: 'Courier New', monospace; font-size: 0.85rem; color: #94a3b8; overflow-x: auto; }
+        .step-code .method { color: #10b981; font-weight: 700; }
+        .step-code .endpoint { color: #0ea5e9; }
+        .step-code .header { color: #f59e0b; }
+        .step-code .json { color: #a78bfa; }
+        
+        .connector { position: absolute; left: 19px; top: 45px; bottom: -30px; width: 2px; background: linear-gradient(to bottom, #334155, transparent); }
+        
+        .arrow-down { text-align: center; color: #64748b; font-size: 1.2rem; margin: 10px 0; }
+        
+        .actor-badges { display: flex; gap: 12px; margin-bottom: 30px; }
+        .actor-badge { padding: 10px 20px; border-radius: 8px; font-size: 0.9rem; font-weight: 600; }
+        .badge-player { background: rgba(16, 185, 129, 0.2); color: #6ee7b7; border: 1px solid #10b981; }
+        .badge-kms { background: rgba(14, 165, 233, 0.2); color: #7dd3fc; border: 1px solid #0ea5e9; }
+        .badge-redis { background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid #ef4444; }
+        .badge-mysql { background: rgba(59, 130, 246, 0.2); color: #93c5fd; border: 1px solid #3b82f6; }
+        .badge-drm { background: rgba(168, 85, 247, 0.2); color: #d8b4fe; border: 1px solid #a855f7; }
+        
+        .note { background: rgba(245, 158, 11, 0.1); border-left: 4px solid #f59e0b; padding: 16px; border-radius: 0 8px 8px 0; margin-top: 30px; }
+        .note-title { color: #f59e0b; font-weight: 600; margin-bottom: 6px; }
+        .note-text { color: #94a3b8; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Flujo de Licencias Widevine</h1>
+        <p class="subtitle">Secuencia completa desde el Player hasta la licencia firmada</p>
+        
+        <div class="actor-badges">
+            <div class="actor-badge badge-player">📱 Player</div>
+            <div class="actor-badge badge-kms">⚡ KMS API</div>
+            <div class="actor-badge badge-redis">⚡ Redis</div>
+            <div class="actor-badge badge-mysql">🗄️ MySQL</div>
+            <div class="actor-badge badge-drm">🔐 DRM Provider</div>
+        </div>
+        
+        <div class="flow">
+            <!-- Step 1 -->
+            <div class="step">
+                <div class="step-number">1</div>
+                <div class="step-content">
+                    <div class="step-title">Player solicita licencia</div>
+                    <div class="step-desc">El Player envía el challenge Widevine (contenido binario) con el header X-DRM-KID que identifica la key ID del contenido.</div>
+                    <div class="step-code">
+                        <span class="method">POST</span> <span class="endpoint">/wv/license</span><br>
+                        <span class="header">X-DRM-KID:</span> a1b2c3d4e5f67890...<br>
+                        <span class="header">Content-Type:</span> application/octet-stream<br>
+                        <span class="json">[challenge binary data]</span>
+                    </div>
+                </div>
+                <div class="connector"></div>
+            </div>
+            
+            <!-- Step 2 -->
+            <div class="step">
+                <div class="step-number">2</div>
+                <div class="step-content">
+                    <div class="step-title">KMS valida el KID</div>
+                    <div class="step-desc">La API verifica que el header X-DRM-KID esté presente. Si falta, retorna HTTP 400.</div>
+                </div>
+                <div class="connector"></div>
+            </div>
+            
+            <!-- Step 3 -->
+            <div class="step">
+                <div class="step-number">3</div>
+                <div class="step-content">
+                    <div class="step-title">Lookup de key en Redis (caché)</div>
+                    <div class="step-desc">Primero intenta obtener la key desde Redis con key pattern <code>drm:key:{kid}</code>. TTL de 6 horas.</div>
+                    <div class="step-code">
+                        <span class="method">REDIS GET</span> drm:key:a1b2c3d4...<br>
+                        <span class="json">→ "00112233445566778899aabbccddeeff"</span>
+                    </div>
+                </div>
+                <div class="connector"></div>
+            </div>
+            
+            <!-- Step 4 -->
+            <div class="step">
+                <div class="step-number">4</div>
+                <div class="step-content">
+                    <div class="step-title">Fallback: MySQL (si Redis miss)</div>
+                    <div class="step-desc">Si Redis no tiene la key o no está disponible, consulta MySQL directamente la tabla content_keys.</div>
+                    <div class="step-code">
+                        <span class="method">SELECT</span> content_key <span class="method">FROM</span> content_keys<br>
+                        <span class="method">WHERE</span> kid = <span class="json">'a1b2c3d4...'</span>
+                    </div>
+                </div>
+                <div class="connector"></div>
+            </div>
+            
+            <!-- Step 5 -->
+            <div class="step">
+                <div class="step-number">5</div>
+                <div class="step-content">
+                    <div class="step-title">KMS envía challenge al DRM Provider</div>
+                    <div class="step-desc">Con la key validada, reenvía el challenge binario al proveedor DRM Widevine para firma.</div>
+                    <div class="step-code">
+                        <span class="method">POST</span> <span class="endpoint">{DRM_PROVIDER_URL}</span><br>
+                        <span class="header">Content-Type:</span> application/octet-stream<br>
+                        <span class="json">[challenge binary data]</span>
+                    </div>
+                </div>
+                <div class="connector"></div>
+            </div>
+            
+            <!-- Step 6 -->
+            <div class="step">
+                <div class="step-number">6</div>
+                <div class="step-content">
+                    <div class="step-title">DRM Provider firma la licencia</div>
+                    <div class="step-desc">El proveedor firma el challenge con su private key y retorna la licencia Widevine en formato binario.</div>
+                    <div class="step-code">
+                        <span class="method">200 OK</span><br>
+                        <span class="json">[signed license binary]</span>
+                    </div>
+                </div>
+                <div class="connector"></div>
+            </div>
+            
+            <!-- Step 7 -->
+            <div class="step">
+                <div class="step-number">7</div>
+                <div class="step-content">
+                    <div class="step-title">KMS retorna licencia al Player</div>
+                    <div class="step-desc">La licencia firmada se retorna al Player como application/octet-stream. El Player puede ahora descifrar el contenido.</div>
+                    <div class="step-code">
+                        <span class="method">200 OK</span> <span class="endpoint">/wv/license</span><br>
+                        <span class="header">Content-Type:</span> application/octet-stream<br>
+                        <span class="json">[signed license binary]</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="note">
+            <div class="note-title">💡 Nota sobre Key Rotation</div>
+            <div class="note-text">Cuando se rota una key (<code>POST /api/keys/rotate</code>), la key anterior permanece válida en MySQL para contenido VOD ya empaquetado. Solo la key "activa" del canal cambia para nuevo contenido live.</div>
+        </div>
+    </div>
+</body>
+</html>
